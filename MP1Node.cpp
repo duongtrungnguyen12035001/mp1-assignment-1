@@ -160,9 +160,7 @@ int MP1Node::introduceSelfToGroup(Address *joinaddr) {
  * DESCRIPTION: Wind up this node and clean up state
  */
 int MP1Node::finishUpThisNode(){
-   /*
-    * Your code goes here
-    */
+   return 0;
 }
 
 /**
@@ -215,9 +213,29 @@ void MP1Node::checkMessages() {
  * DESCRIPTION: Message handler for different message types
  */
 bool MP1Node::recvCallBack(void *env, char *data, int size ) {
-	/*
-	 * Your code goes here
-	 */
+if (size < (int)sizeof(MessageHdr)) {
+#ifdef DEBUGLOG
+        log->LOG(&memberNode->addr, "Message received with size less than MessageHdr. Ignored.");
+#endif
+        return false;
+    }
+
+    MessageHdr * mes = (MessageHdr *)data;
+
+    switch (mes->msgType) {
+        case JOINREQ:
+            return recvJoinReq(env, data + sizeof(MessageHdr), size - sizeof(MessageHdr));
+        case JOINREP:
+            return recvJoinRep(env, data + sizeof(MessageHdr), size - sizeof(MessageHdr));
+        case HEARTBEATREQ:
+            return recvHeartbeatReq(env, data + sizeof(MessageHdr), size - sizeof(MessageHdr));
+        case HEARTBEATREP:
+            return recvHeartbeatRep(env, data + sizeof(MessageHdr), size - sizeof(MessageHdr));
+        case DUMMYLASTMSGTYPE:
+            return false;
+    }
+
+    return false;
 }
 
 /**
@@ -229,11 +247,29 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
  */
 void MP1Node::nodeLoopOps() {
 
-	/*
-	 * Your code goes here
-	 */
+	int timeout = 5;
+     	stringstream s;
+	  for(vector<MemberListEntry>::iterator it = memberNode->memberList.begin(); it != memberNode->memberList.end(); it++) {
+        if(par->getcurrtime() - it->timestamp > timeout){
+            Address addr = AddressFromMLE(&(*it));
+            ss << "Timing out" << addr.getAddress();
+            log->LOG(&memberNode->addr, s.str().c_str());
+            s.str("");
 
-    return;
+            vector<MemberListEntry>::iterator next_it = it;
+            vector<MemberListEntry>::iterator next_next_it = it+1;
+            for(next_it = it; next_next_it != memberNode->memberList.end(); next_it++, next_next_it++){
+                *next_it = *next_next_it;
+            }
+            memberNode->memberList.resize(memberNode->memberList.size()-1);
+            it -=1;
+            LogMemberList();
+            log->logNodeRemove(&memberNode->addr, &addr);
+        }
+     }
+     UpdateMemberList(&memberNode->addr, ++memberNode->heartbeat);
+     SendHBSomewhere(&memberNode->addr, memberNode->heartbeat);
+      return;
 }
 
 /**
